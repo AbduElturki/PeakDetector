@@ -1,6 +1,7 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+use ieee.numeric_std_unsigned.all;
 use work.common_pack.all;
 library UNISIM;
 use UNISIM.VCOMPONENTS.ALL;
@@ -29,7 +30,7 @@ entity cmdProc is
 end;
 
 architecture commands of cmdProc is
-  type state_type is (CommandLetter, Cmd0, Cmd1, Cmd2, StartCountingBitches, ConvertNumbers);
+  type state_type is (CommandLetter, Cmd0, Cmd1, Cmd2, StartCountingBitches, Waitfordata, Sendfirstbyte, SendSecondbyte, SendSpacebyte);
   signal curState, nextState: state_type;
   signal n0, n1, n2: std_logic_vector(7 downto 0);
 begin
@@ -69,33 +70,49 @@ begin
         n0 <= rxdata;
         nextState <= StartCountingBitches;
         start <= '1';
-      end if; 
+      end if;
       
       when StartCountingBitches =>
-        nextState <= ConvertNumbers;
+        nextState <= Waitfordata;
         numWords_bcd(0)<=n0(3 downto 0);
         numWords_bcd(1)<=n1(3 downto 0);
         numWords_bcd(2)<=n2(3 downto 0);
-        start <= '1'
+        start <= '1';
       
       
       when WaitForData =>
         if dataready = '1' then 
-          NextState <= ConvertNumbers;
+          NextState <= Sendfirstbyte;
         else
-          nextState => WaitForData;
+          nextState <= WaitForData;
         end if;
         
-      when ConvertNumbers => 
+      when Sendfirstbyte => 
         if (byte(7 downto 4)>"1001") then
-          txData1<="0100" & byte(7 downto 4)-"1001"; -- A-F
+          txData<="0100" & byte(7 downto 4)-"1001"; -- A-F
         else
-          txData1<="0011" & byte(7 downto 4); -- 0-9
+          txData<="0011" & byte(7 downto 4); -- 0-9
         end if;
-        if (hex(3 downto 0)>"1001") then
-          txData2<="0100" & byte(3 downto 0)-"1001"; -- A-F
+        txNow <='1';
+        nextState <= Sendsecondbyte;
+        
+      when Sendsecondbyte =>
+        if (byte(3 downto 0)>"1001") then
+          txData<="0100" & byte(3 downto 0)-"1001"; -- A-F
         else
-          txData2<="0011" & byte(3 downto 0); -- 0-9
+          txData<="0011" & byte(3 downto 0); -- 0-9
+        end if;
+        txNow <='1';
+        nextState <= Sendspacebyte;
+        
+      when Sendspacebyte =>
+        txData<="00100000";
+        txNow <='1';
+        if seqDone = '1' then
+          nextState <= CommandLetter;
+        else
+          start <= '1';
+          nextState <= WaitForData;
         end if;
         
   end case;
