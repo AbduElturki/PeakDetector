@@ -33,11 +33,12 @@ entity cmdProc is
 end entity;
 
 architecture commands of cmdProc is
-  type state_type is (CommandLetter, Number0, Number1, Number2, StartCountingSendBreak, Waitfordata, Sendfirstbyte, SendSecondbyte, SendSpacebyte);
+  type state_type is (CommandLetter, Number0, Number1, Number2, StartCountingSendBreak, Waitfordata, ListVals, ShowPeaks);
   signal curState, nextState: state_type;
-  signal n0, n1, n2: std_logic_vector(7 downto 0);
-  signal breakProgress: integer range 0 to 7;
-  signal rxNowEdge, canStateChange: std_logic:='0';
+  signal n0, n1, n2: integer range 0 to 9:=0;
+  signal triggerNStore: integer range -1 to 2:=-1;
+  signal breakProgress: integer range 0 to 7:=0;
+  signal canStateChange, updatedBreak: std_logic:='0';
   
 	function charToVector(char:character) return std_logic_vector is 
 	begin 
@@ -46,8 +47,12 @@ architecture commands of cmdProc is
 
 	function mainMenuInput(val:std_logic_vector (7 downto 0)) return state_type is
 	begin
-		if val="01000001" or val="01100001" then -- a or A
+		if val="01000001" or val="01100001" then -- A or a
         return Number0;
+		elsif val="01001100" or val="01101100" then -- L or l
+        return ListVals;
+		elsif val="01010000" or val="01110000" then -- P or p
+        return ShowPeaks;
 		else
 		  return CommandLetter;
 		end if;
@@ -68,24 +73,34 @@ begin
 			SegOut3<=' ';
 		when Number1=>
 			SegOut0<='A';
-			SegOut1<=CHARACTER'VAL(53);
+			SegOut1<=CHARACTER'VAL(48 + n0);
 			SegOut2<=' ';
 			SegOut3<=' ';
 		when Number2=>
 			SegOut0<='A';
-			SegOut1<=CHARACTER'VAL(to_integer(unsigned(n0)));
-			SegOut2<=CHARACTER'VAL(to_integer(unsigned(n1)));
+			SegOut1<=CHARACTER'VAL(48 + n0);
+			SegOut2<=CHARACTER'VAL(48 + n1);
 			SegOut3<=' ';
 		when StartCountingSendBreak=>
 			SegOut0<='C';
-			SegOut1<=CHARACTER'VAL(to_integer(unsigned(n0)));
-			SegOut2<=CHARACTER'VAL(to_integer(unsigned(n1)));
-			SegOut3<=CHARACTER'VAL(to_integer(unsigned(n2)));
+			SegOut1<=CHARACTER'VAL(48 + n0);
+			SegOut2<=CHARACTER'VAL(48 + n1);
+			SegOut3<=CHARACTER'VAL(48 + n2);
 		when Waitfordata=>
 			SegOut0<='-';
-			SegOut1<=CHARACTER'VAL(to_integer(unsigned(n0)));
-			SegOut2<=CHARACTER'VAL(to_integer(unsigned(n1)));
-			SegOut3<=CHARACTER'VAL(to_integer(unsigned(n2)));
+			SegOut1<=CHARACTER'VAL(48 + n0);
+			SegOut2<=CHARACTER'VAL(48 + n1);
+			SegOut3<=CHARACTER'VAL(48 + n2);
+		when ListVals=>
+			SegOut0<='L';
+			SegOut1<=CHARACTER'VAL(48 + 5);
+			SegOut2<=CHARACTER'VAL(48 + 5);
+			SegOut3<=CHARACTER'VAL(48 + 5);
+		when ShowPeaks=>
+			SegOut0<='P';
+			SegOut1<=CHARACTER'VAL(48 + 1);
+			SegOut2<=CHARACTER'VAL(48 + 3);
+			SegOut3<=CHARACTER'VAL(48 + 2);
 		when others=>
 			SegOut0<='9';
 			SegOut1<='9';
@@ -94,56 +109,72 @@ begin
 	end case;
 	end process;
 	
-  combi_nextState: process(curState, canStateChange)
+  combi_nextState: process(curState, canStateChange, breakProgress)
   begin
    start <= '0';
 	rxDone <= '0';
 	txData <= "00000000";
 	txNow<='0';
-	breakProgress <= 0;
+	triggerNStore<=-1;
 	
-	if (canStateChange='1') then
-		case curState is
-		 when CommandLetter =>
+	case curState is
+	 when CommandLetter =>
+		if (canStateChange='1') then
 			rxDone <= '1';
 			txNow <= '1';
 			txData <= rxdata;
 			nextState <= mainMenuInput(rxData);
-		 
-		 when Number0 => --00110000 48 |   00111001 57
+		else
+			nextState <= CommandLetter;
+		end if;
+	 when Number0 => --00110000 48 |   00111001 57
+		if (canStateChange='1') then
 			rxDone <= '1';
 			if rxdata>="00110000" and rxdata<="00111001" then --Number
-			  nextState <= Number1;
-			  n0 <= rxdata;
+				nextState <= Number1;
+				rxDone <= '1';
+				triggerNStore<=0;
 				txNow <= '1';
 				txData <= rxdata;
 			else
 				nextState <= mainMenuInput(rxData);
 			end if;
-		
-		when Number1 => --00110000 48 |   00111001 57
-			rxDone <= '1';
+		else
+			nextState <= Number0;
+		end if;
+	
+	when Number1 => --00110000 48 |   00111001 57
+		if (canStateChange='1') then
 			if rxdata>="00110000" and rxdata<="00111001" then --Number
-			  nextState <= Number2;
-			  n1 <= rxdata;
+				nextState <= Number2;
+				rxDone <= '1';
+				triggerNStore<=1;
 				txNow <= '1';
 				txData <= rxdata;
 			else
 				nextState <= mainMenuInput(rxData);
 			end if;
-		
-		when Number2 => --00110000 48 |   00111001 57
-			rxDone <= '1';
+		else
+			nextState <= Number1;
+		end if;
+	
+	when Number2 => --00110000 48 |   00111001 57
+		if (canStateChange='1') then
 			if rxdata>="00110000" and rxdata<="00111001" then --Number
-			  nextState <= StartCountingSendBreak;
-			  n2 <= rxdata;
+				nextState <= StartCountingSendBreak;
+				rxDone <= '1';
+				triggerNStore<=2;
 				txNow <= '1';
 				txData <= rxdata;
 			else
 				nextState <= mainMenuInput(rxData);
 			end if;
-      
-		when StartCountingSendBreak =>
+		else
+			nextState <= Number2;
+		end if;
+	
+	when StartCountingSendBreak =>
+		if (canStateChange='1') then
 			txNow <= '1';
 			
 			case breakProgress is
@@ -152,33 +183,58 @@ begin
 				when 2 to 5 =>	txData <= "00111101"; -- =
 				when others =>	txData <= "00111111"; -- ?
 			end case;
-			txData <= "01000010"; 
-			
+		
 			if (breakProgress=7) then
-				nextState <= StartCountingSendBreak;
-				breakProgress <= 7;
+				nextState <= WaitForData;
 			else
 				nextState <= StartCountingSendBreak;
-				breakProgress <= breakProgress+1;
 			end if;
-      
+		else
+			nextState <= StartCountingSendBreak;
+		end if;
+	
+	when WaitForData =>
+		nextState <= WaitForData;
 		-- To be continued here with sending and receiving data to dataproc
-      when others =>
-			nextState <= CommandLetter;
-		end case;
-	else
+		
+	when ListVals =>
+		nextState <= ListVals;
+		
+	when ShowPeaks =>
+		nextState <= showPeaks;
+		
+	when others =>
 		nextState <= CommandLetter;
-	end if;
+	end case;
 end process;
+
+breakProgressSwitcher: process (clk)
+  begin
+	if (curState = StartCountingSendBreak) then
+		if clk'event AND clk='1' AND canStateChange='1' then
+			breakProgress<=breakProgress+1;
+		end if;
+	else
+		breakProgress<=0;
+	end if;
+  end process;
 
 seq_state: process (clk, reset)
   begin
     if reset = '1' then
       curState <= CommandLetter;
     elsif clk'event AND clk='1' then
+		case triggerNStore is
+			when 0 => n0 <= to_integer(signed(rxdata(3 downto 0)));
+			when 1 => n1 <= to_integer(signed(rxdata(3 downto 0)));
+			when 2 => n2 <= to_integer(signed(rxdata(3 downto 0)));
+			when others =>
+		end case;
+		
       curState <= nextState;
 	 end if;
-  end process; -- seq
+  end process;
 
 	canStateChange <= ((rxNow) and (txDone));
+
 end;

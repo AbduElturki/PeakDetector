@@ -36,6 +36,8 @@ architecture Behavioral of Debugger is
 			when '9'=> return "00001001";
 			when 'A'=> return "00010001";
 			when 'C'=> return "01100011";
+			when 'L'=> return "11100011";
+			when 'P'=> return "00110001";
 			when '-'=> return "11111101";
 			when ' '=> return "11111111";
 			when others=> return "11111110";
