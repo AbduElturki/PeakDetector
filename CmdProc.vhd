@@ -230,10 +230,14 @@ begin
 	  end if;
 	  
 	when ListVals =>
-		nextState <= ListVals;
+		txData<="00100000";
+	  	txNow <='1';
+		nextState <= CommandLetter;
 		
 	when ShowPeaks =>
-		nextState <= showPeaks;
+		txData<="00100000";
+	  	txNow <='1';
+		nextState <= CommandLetter;
 		
 	when others =>
 		nextState <= CommandLetter;
