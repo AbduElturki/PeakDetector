@@ -22,3 +22,18 @@ Net "RESET" LOC = A8 | IOSTANDARD = LVTTL; #Bank = 0, pin name = IO_L33N, Sch na
 ### slide switch
 #Net "mode" LOC = T10 | IOSTANDARD = LVTTL; #Bank = 0, pin name = IO_L33N, Sch name = BTNU
 
+## Debugging
+Net "OUT_SegSel(3)" LOC = N16 | IOSTANDARD=LVTTL;
+Net "OUT_SegSel(2)" LOC = N15 | IOSTANDARD=LVTTL;
+Net "OUT_SegSel(1)" LOC = P18 | IOSTANDARD=LVTTL;
+Net "OUT_SegSel(0)" LOC = P17 | IOSTANDARD=LVTTL;
+
+Net "OUT_SegData(7)" LOC = T17 | IOSTANDARD=LVTTL;
+Net "OUT_SegData(6)" LOC = T18 | IOSTANDARD=LVTTL;
+Net "OUT_SegData(5)" LOC = U17 | IOSTANDARD=LVTTL;
+Net "OUT_SegData(4)" LOC = U18 | IOSTANDARD=LVTTL;
+Net "OUT_SegData(3)" LOC = M14 | IOSTANDARD=LVTTL;
+Net "OUT_SegData(2)" LOC = N14 | IOSTANDARD=LVTTL;
+Net "OUT_SegData(1)" LOC = L14 | IOSTANDARD=LVTTL;
+Net "OUT_SegData(0)" LOC = M13 | IOSTANDARD=LVTTL;
+

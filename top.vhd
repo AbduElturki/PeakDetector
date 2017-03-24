@@ -17,7 +17,9 @@ entity PEAK_DETECTOR_TOP is
 		CLK : in std_logic;
 		RESET : in std_logic;
 		RX_DATA : in std_logic;
-		TX_DATA : out std_logic
+		TX_DATA : out std_logic;
+		OUT_SegSel : out std_logic_vector (3 downto 0);
+		OUT_SegData : out std_logic_vector (7 downto 0)
 	);
 end;
 
@@ -71,7 +73,12 @@ architecture STRUCT of PEAK_DETECTOR_TOP is
 			
 			TXDATA : out std_logic_vector(7 downto 0);
 			TXNOW : out std_logic;
-			TXDONE : in std_logic
+			TXDONE : in std_logic;
+			
+			SegOut0: out Character;
+			SegOut1: out Character;
+			SegOut2: out Character;
+			SegOut3: out Character
 		);
 	end component;
 
@@ -104,15 +111,24 @@ architecture STRUCT of PEAK_DETECTOR_TOP is
 			data : out std_logic_vector(7 downto 0)
 		);
 	end component;
+	
+	component Debugger is
+		port(
+			clk: in std_logic;
+			SegSel : out std_logic_vector (3 downto 0);
+			SegData : out std_logic_vector (7 downto 0);
+			SegIn0: in Character;
+			SegIn1: in Character;
+			SegIn2: in Character;
+			SegIn3: in Character
+		);
+	end component;
 
---	for rx: UART_RX_CTRL use
---	  entity work.UART_RX_CTRL(rcvr2);
-
---	signal sig_rxnow, sig_rxdone, sig_overr, sig_framerr, sig_txnow, sig_txdone: std_logic;
 	signal sig_rx_frame_err, sig_rx_over_err, sig_rx_valid, sig_rx_done, sig_tx_done, sig_tx_now, sig_seqdone, sig_dataready, sig_start, sig_dp_ctrl1, sig_dp_ctrl2 : std_logic;
 	signal sig_rx_data, sig_tx_data, sig_byte, sig_dp_data : std_logic_vector(7 downto 0);
 	signal sig_data_results : CHAR_ARRAY_TYPE(0 to RESULT_BYTE_NUM-1);
 	signal sig_maxindex, sig_numwords : BCD_ARRAY_TYPE(2 downto 0);
+	signal sig_debug0, sig_debug1, sig_debug2, sig_debug3 : Character;
 
 begin
 
@@ -162,7 +178,12 @@ controller : CMDPROC
 		
 		TXDATA => sig_tx_data,
 		TXNOW => sig_tx_now,
-		TXDONE => sig_tx_done
+		TXDONE => sig_tx_done,
+		
+		SegOut0 => sig_debug0,
+		SegOut1 => sig_debug1,
+		SegOut2 => sig_debug2,
+		SegOut3 => sig_debug3
 	);
 
 data_processor : dataConsume
@@ -191,6 +212,17 @@ data_generator : DATAGEN
 		ctrlIn => sig_dp_ctrl1,
 		ctrlOut => sig_dp_ctrl2,
 		data => sig_dp_data
+	);
+
+debuggerInst: debugger
+	port map (
+		clk => clk,
+		SegSel => OUT_SegSel,
+		SegData => OUT_SegData,
+		SegIn0 => sig_debug0,
+		SegIn1 => sig_debug1,
+		SegIn2 => sig_debug2,
+		SegIn3 => sig_debug3
 	);
 	
 end;
