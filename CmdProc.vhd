@@ -33,7 +33,7 @@ entity cmdProc is
 end entity;
 
 architecture commands of cmdProc is
-  type state_type is (CommandLetter, Number0, Number1, Number2, StartCountingSendBreak, Waitfordata, ListVals, ShowPeaks);
+  type state_type is (CommandLetter, Number0, Number1, Number2, StartCountingSendBreak, Waitfordata, Sendfirstbyte, SendSecondbyte, SendSpacebyte, ListVals, ShowPeaks);
   signal curState, nextState: state_type;
   signal n0, n1, n2: integer range 0 to 9:=0;
   signal triggerNStore: integer range -1 to 2:=-1;
@@ -186,17 +186,49 @@ begin
 		
 			if (breakProgress=7) then
 				nextState <= WaitForData;
+				start <= '1';
 			else
 				nextState <= StartCountingSendBreak;
 			end if;
 		else
 			nextState <= StartCountingSendBreak;
 		end if;
-	
-	when WaitForData =>
-		nextState <= WaitForData;
-		-- To be continued here with sending and receiving data to dataproc
 		
+	when WaitForData =>
+	  if dataready = '1' then 
+		 NextState <= Sendfirstbyte;
+	  else
+		 nextState <= WaitForData;
+	  end if;
+	  
+	when Sendfirstbyte => 
+	  if (byte(7 downto 4)>"1001") then
+		 txData<="0100" & std_logic_vector(unsigned(byte(7 downto 4))-"1001"); -- A-F
+	  else
+		 txData<="0011" & byte(7 downto 4); -- 0-9
+	  end if;
+	  txNow <='1';
+	  nextState <= Sendsecondbyte;
+	  
+	when Sendsecondbyte =>
+	  if (byte(3 downto 0)>"1001") then
+		 txData<="0100" & std_logic_vector(unsigned(byte(3 downto 0))-"1001"); -- A-F
+	  else
+		 txData<="0011" & byte(3 downto 0); -- 0-9
+	  end if;
+	  txNow <='1';
+	  nextState <= Sendspacebyte;
+	  
+	when Sendspacebyte =>
+	  txData<="00100000";
+	  txNow <='1';
+	  if seqDone = '1' then
+		 nextState <= CommandLetter;
+	  else
+		 start <= '1';
+		 nextState <= WaitForData;
+	  end if;
+	  
 	when ListVals =>
 		nextState <= ListVals;
 		
