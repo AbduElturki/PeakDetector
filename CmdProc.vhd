@@ -2,6 +2,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use work.common_pack.all;
+use IEEE.std_logic_unsigned.all;
 library UNISIM;
 use UNISIM.VCOMPONENTS.ALL;
 
@@ -33,12 +34,16 @@ entity cmdProc is
 end entity;
 
 architecture commands of cmdProc is
-  type state_type is (CommandLetter, Number0, Number1, Number2, StartCountingSendBreak, Waitfordata, Sendfirstbyte, SendSecondbyte, SendSpacebyte, ListVals, ShowPeaks);
+  type state_type is (CommandLetter, Number0, Number1, Number2, StartCountingSendBreak, Waitfordata, Sendfirstbyte, SendSecondbyte, SendSpacebyte, ListVals, ShowPeaks,listSendfirstbyte,listSendsecondbyte,listSendSpace, firstPeakbyte, secondPeakbyte, peakSendSpace, indexSendfirstbyte, indexSendsecondbyte, indexSendspacebyte);
   signal curState, nextState: state_type;
   signal n0, n1, n2: integer range 0 to 9:=0;
   signal triggerNStore: integer range -1 to 2:=-1;
   signal breakProgress: integer range 0 to 7:=0;
   signal canStateChange, updatedBreak: std_logic:='0';
+  signal count: integer range 0 to 7:=0;
+  signal en1: std_logic;
+  signal peakdata: CHAR_ARRAY_TYPE(0 to RESULT_BYTE_NUM-1);
+  signal peakindex: std_logic_vector(7 downto 0);
   
 	function charToVector(char:character) return std_logic_vector is 
 	begin 
@@ -111,11 +116,12 @@ begin
 	
   combi_nextState: process(curState, canStateChange, breakProgress)
   begin
-   start <= '0';
+  start <= '0';
 	rxDone <= '0';
 	txData <= "00000000";
 	txNow<='0';
 	triggerNStore<=-1;
+  en1 <= '0';
 	
 	case curState is
 	 when CommandLetter =>
@@ -232,11 +238,85 @@ begin
 	when ListVals =>
 		txData<="00100000";
 	  	txNow <='1';
-		nextState <= CommandLetter;
+		nextState <= listSendfirstbyte;
 		
+	when listSendfirstbyte =>
+	  if (peakdata(count)(7 downto 4)>"1001") then
+		 txData<="0100" & std_logic_vector(unsigned(byte(3 downto 0))-"1001"); -- A-F
+	  else
+		 txData<="0011" & peakdata(count)(3 downto 0); -- 0-9
+	  end if;
+	  txNow <='1';
+	  nextState <= listSendsecondbyte;
+	  
+	when listSendsecondbyte =>
+	  if (peakdata(count)(3 downto 0)>"1001") then
+		 txData<="0100" & std_logic_vector(unsigned(byte(3 downto 0))-"1001"); -- A-F
+	  else
+		 txData<="0011" & peakdata(count)(3 downto 0); -- 0-9
+	  end if;
+	  txNow <='1';
+	  nextState <= listSendSpace;
+	  
+	when listSendSpace => 
+	   txData<="00100000";
+	   txNow <='1';
+	   if count = 6 then
+		  nextState <= CommandLetter;
+	   else
+		  en1 <= '1';
+		  nextState <= listSendfirstbyte;
+	   end if;
+	   
 	when ShowPeaks =>
 		txData<="00100000";
 	  	txNow <='1';
+		nextState <= firstPeakbyte;
+		
+	when firstPeakbyte =>
+	  if (peakdata(3)(7 downto 4)>"1001") then
+		 txData<="0100" & std_logic_vector(unsigned(byte(3 downto 0))-"1001"); -- A-F
+	  else
+		 txData<="0011" & peakdata(3)(7 downto 4); -- 0-9
+	  end if;
+	  txNow <='1';
+	  nextState <= listSendsecondbyte;
+	  
+	when secondPeakbyte =>
+	  if (peakdata(3)(3 downto 0)>"1001") then
+		 txData<="0100" & std_logic_vector(unsigned(byte(3 downto 0))-"1001"); -- A-F
+	  else
+		 txData<="0011" & peakdata(3)(3 downto 0); -- 0-9
+	  end if;
+	  txNow <='1';
+	  nextState <= peakSendSpace;
+	  
+  when peakSendSpace =>
+    txData<="00100000";
+	  txNow <='1';
+		nextState <= indexSendfirstbyte;
+	
+	when indexSendfirstbyte =>
+	  if (peakindex(7 downto 4)>"1001") then
+		 txData<="0100" & std_logic_vector(unsigned(byte(3 downto 0))-"1001"); -- A-F
+	  else
+		 txData<="0011" & peakindex(7 downto 4); -- 0-9
+	  end if;
+	  txNow <='1';
+	  nextState <= indexSendsecondbyte;
+	  
+	when indexSendsecondbyte =>
+	  if (peakindex(3 downto 0)>"1001") then
+		 txData<="0100" & std_logic_vector(unsigned(byte(3 downto 0))-"1001"); -- A-F
+	  else
+		 txData<="0011" & peakindex(3 downto 0); -- 0-9
+	  end if;
+	  txNow <='1';
+	  nextState <= indexSendSpacebyte;
+	  
+	when indexSendSpacebyte =>
+	  txData<="00100000";
+	  txNow <='1';
 		nextState <= CommandLetter;
 		
 	when others =>
@@ -272,5 +352,39 @@ seq_state: process (clk, reset)
   end process;
 
 	canStateChange <= ((rxNow) and (txDone));
+
+counter: process(clk, reset, en1)
+  begin
+    if reset = '1' then count <= 0;
+      elsif (clk = '1' and clk'event) then
+      if (en1 = '1') then count <= count + 1;
+      else count <= count;
+      end if;
+    end if;
+  end process;
+  
+dataregister: process(clk, seqdone, reset)
+  begin
+    if reset = '1' then peakdata <= (others => (others => '0'));
+    elsif (clk = '1' and clk'event) then
+      if (seqdone = '1') then peakdata <= dataResults;
+      else peakdata <= peakdata;
+      end if;
+    end if;
+  end process;
+  
+indexregister: process(clk,seqdone, reset)
+  begin
+    if reset = '1' then peakindex <= "00000000";
+    elsif (clk = '1'and clk'event) then
+      if (seqdone = '1') then peakindex <= ( (maxIndex(0) * "01"     ) 
+                                           + (maxIndex(1) * "1010"   ) 
+                                           + (maxIndex(2) * "1100100")
+                                           );
+      else peakindex <= peakindex;
+      end if;
+    end if;
+  end process;
+
 
 end;
