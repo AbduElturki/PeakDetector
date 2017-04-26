@@ -41,9 +41,9 @@ architecture commands of cmdProc is
   signal breakProgress: integer range 0 to 7:=0;
   signal canStateChange, updatedBreak: std_logic:='0';
   signal count: integer range 0 to 7:=0;
-  signal en1: std_logic;
+  signal en1,rst: std_logic;
   signal peakdata: CHAR_ARRAY_TYPE(0 to RESULT_BYTE_NUM-1);
-  signal peakindex: std_logic_vector(7 downto 0);
+  signal peakindex: std_logic_vector(10 downto 0);
   
 	function charToVector(char:character) return std_logic_vector is 
 	begin 
@@ -108,7 +108,7 @@ begin
 			SegOut3<=CHARACTER'VAL(48 + 2);
 		when others=>
 			SegOut0<='9';
-			SegOut1<='9';
+			SegOut1<=CHARACTER'VAL(48 + count);
 			SegOut2<='9';
 			SegOut3<='9';
 	end case;
@@ -121,7 +121,8 @@ begin
 	txData <= "00000000";
 	txNow<='0';
 	triggerNStore<=-1;
-  en1 <= '0';
+   en1 <= '0';
+   rst <= '0';
 	
 	case curState is
 	 when CommandLetter =>
@@ -236,7 +237,7 @@ begin
 	  end if;
 	  
 	when ListVals =>
-		txData<="00100000";
+		txData<= rxdata;
 	  	txNow <='1';
 		nextState <= listSendfirstbyte;
 		
@@ -261,7 +262,8 @@ begin
 	when listSendSpace => 
 	   txData<="00100000";
 	   txNow <='1';
-	   if count = 6 then
+	   if count >= 6 then
+		  rst <= '1';
 		  nextState <= CommandLetter;
 	   else
 		  en1 <= '1';
@@ -340,6 +342,10 @@ seq_state: process (clk, reset)
     if reset = '1' then
       curState <= CommandLetter;
     elsif clk'event AND clk='1' then
+		n0 <= n0;
+		n1 <= n1;
+		n2 <= n2;
+	 
 		case triggerNStore is
 			when 0 => n0 <= to_integer(signed(rxdata(3 downto 0)));
 			when 1 => n1 <= to_integer(signed(rxdata(3 downto 0)));
@@ -353,9 +359,9 @@ seq_state: process (clk, reset)
 
 	canStateChange <= ((rxNow) and (txDone));
 
-counter: process(clk, reset, en1)
+counter: process(clk, reset, en1, rst)
   begin
-    if reset = '1' then count <= 0;
+    if reset = '1' or rst = '1' then count <= 0;
       elsif (clk = '1' and clk'event) then
       if (en1 = '1') then count <= count + 1;
       else count <= count;
@@ -375,7 +381,7 @@ dataregister: process(clk, seqdone, reset)
   
 indexregister: process(clk,seqdone, reset)
   begin
-    if reset = '1' then peakindex <= "00000000";
+    if reset = '1' then peakindex <= "00000000000";
     elsif (clk = '1'and clk'event) then
       if (seqdone = '1') then peakindex <= ( (maxIndex(0) * "01"     ) 
                                            + (maxIndex(1) * "1010"   ) 
@@ -383,6 +389,7 @@ indexregister: process(clk,seqdone, reset)
                                            );
       else peakindex <= peakindex;
       end if;
+		
     end if;
   end process;
 
